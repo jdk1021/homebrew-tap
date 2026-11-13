@@ -1,0 +1,58 @@
+name: Update AgentDeck cask
+
+# Every 6 hours (and on demand): follow AgentDeck's latest release, re-render the cask from the published
+# ZIP (its SHA-256 must match the release's .sha256 file), commit it, then install it on a clean
+# Apple silicon runner and run the CLI. Uses only this repository's own workflow token.
+on:
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['Casks/**', '.github/**']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cask-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.render.outputs.changed }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Render cask for the latest release
+        id: render
+        run: |
+          tag=$(gh api repos/jdk1021/agentdeck/releases/latest --jq .tag_name)
+          python3 .github/scripts/update-cask.py --tag "$tag" --output Casks/agentdeck.rb
+          if git diff --quiet; then echo "changed=false" >> "$GITHUB_OUTPUT"; else echo "changed=true" >> "$GITHUB_OUTPUT"; fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Commit
+        if: steps.render.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "agentdeck ${{ steps.render.outputs.tag }}"
+          git push
+
+  install-test:
+    needs: update
+    if: needs.update.outputs.changed == 'true' || github.event_name != 'schedule'
+    runs-on: macos-15
+    steps:
+      - name: Install from the tap and run the CLI
+        run: |
+          brew tap jdk1021/tap
+          brew install --cask jdk1021/tap/agentdeck
+          xattr -dr com.apple.quarantine /Applications/AgentDeck.app || true
+          agentdeck --help | head -3
+          agentdeck diagnostics
+          codesign --verify --deep --strict /Applications/AgentDeck.app
+          brew uninstall --cask agentdeck
