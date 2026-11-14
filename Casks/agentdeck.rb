@@ -1,6 +1,6 @@
 cask "agentdeck" do
-  version "0.1.2"
-  sha256 "19f64a2ff1d4a5b586fb17982d63991de98c3781ea15cb9f732fdfb7cd6d318a"
+  version "0.1.3"
+  sha256 "291e26543448aae4c6e6bc0b244cd01fd7629a40e0c0920ae506f1c134467c12"
 
   url "https://github.com/jdk1021/agentdeck/releases/download/v#{version}/AgentDeck-#{version}-macos-arm64.zip"
   name "AgentDeck"
